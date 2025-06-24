@@ -1,0 +1,77 @@
+package paf.cookingapp.demo.controller;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import paf.cookingapp.demo.model.Interaction;
+import paf.cookingapp.demo.repository.InteractionRepository;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import java.util.List;
+import java.util.Map;
+import paf.cookingapp.demo.service.InteractionService;
+import org.springframework.web.server.ResponseStatusException;
+import java.util.stream.Collectors;
+import org.springframework.data.domain.Sort;
+import java.util.HashMap;
+
+@RestController
+@CrossOrigin(
+    origins = "http://localhost:3000",
+    allowedHeaders = {"Content-Type", "Authorization", "X-Requested-With"},
+    exposedHeaders = {"Access-Control-Allow-Origin"},
+    methods = {
+        RequestMethod.GET,
+        RequestMethod.POST,
+        RequestMethod.PUT,
+        RequestMethod.DELETE,
+        RequestMethod.OPTIONS
+    },
+    allowCredentials = "true"
+)
+@RequestMapping("/api")
+public class InteractionController {
+    
+    @Autowired
+    private MongoTemplate mongoTemplate;
+    
+    @Autowired
+    private InteractionRepository interactionRepository;
+
+    @Autowired
+    private InteractionService interactionService;
+
+    // Existing endpoints...
+
+    @GetMapping("/likes/count-by-item/{itemId}")
+    public ResponseEntity<?> getLikeCountByItem(@PathVariable String itemId) {
+        try {
+            Query query = new Query(
+                Criteria.where("itemId").is(itemId)
+                    .and("type").is("LIKE")
+            );
+            long count = mongoTemplate.count(query, Interaction.class);
+            return ResponseEntity.ok(count);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error getting like count: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/likes/by-item/{itemId}/user/{userId}")
+    public ResponseEntity<?> checkUserLiked(@PathVariable String itemId, @PathVariable String userId) {
+        try {
+            Query query = new Query(
+                Criteria.where("itemId").is(itemId)
+                    .and("userId").is(userId)
+                    .and("type").is("LIKE")
+            );
+            boolean hasLiked = mongoTemplate.exists(query, Interaction.class);
+            return ResponseEntity.ok(hasLiked);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error checking like status: " + e.getMessage());
+        }
+    }
+
+    // Rest of your existing controller code...
+}
