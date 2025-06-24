@@ -1,0 +1,168 @@
+import React, { useState, useEffect } from 'react';
+import { HeartIcon as HeartOutline } from '@heroicons/react/24/outline';
+import { HeartIcon as HeartSolid } from '@heroicons/react/24/solid';
+import { ChatBubbleOvalLeftIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
+import Modal from 'react-modal';
+
+Modal.setAppElement('#root');
+
+const SocialInteractionBar = ({ itemId, userId }) => {
+  const [isLiked, setIsLiked] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [comments, setComments] = useState([]);
+  const [newComment, setNewComment] = useState('');
+  const [likeCount, setLikeCount] = useState(0);
+  const [editingComment, setEditingComment] = useState(null);
+  const [editContent, setEditContent] = useState('');
+  const [userDetails, setUserDetails] = useState({});
+
+  const modalStyles = {
+    content: {
+      position: 'relative',
+      background: 'none',
+      border: 'none',
+      padding: 0,
+      margin: 0,
+      inset: 'auto'
+    },
+    overlay: {
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '1rem'
+    }
+  };
+
+  const handleCloseModal = () => {
+    setShowComments(false);
+    setEditingComment(null);
+    setEditContent('');
+  };
+
+  const fetchUserDetails = async (userId) => {
+    if (userDetails[userId]) return;
+    
+    try {
+      const response = await fetch(`http://localhost:8080/api/users/${userId}`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) throw new Error('Failed to fetch user details');
+      
+      const userData = await response.json();
+      setUserDetails(prev => ({
+        ...prev,
+        [userId]: {
+          username: userData.username,
+          fullName: userData.fullName,
+          profilePicture: userData.profilePicture
+        }
+      }));
+    } catch (error) {
+      console.error('Error fetching user details:', error);
+    }
+  };
+
+  const handleLike = async () => {
+    try {
+      const response = await fetch(`http://localhost:8080/api/likes/${itemId}`, {
+        method: isLiked ? 'DELETE' : 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      setIsLiked(!isLiked);
+      setLikeCount(prev => isLiked ? prev - 1 : prev + 1);
+
+      // After liking/unliking, refresh the like count
+      const likesCountResponse = await fetch(`http://localhost:8080/api/likes/count-by-item/${itemId}`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (likesCountResponse.ok) {
+        const count = await likesCountResponse.json();
+        setLikeCount(count);
+      }
+
+    } catch (error) {
+      console.error('Error toggling like:', error);
+      alert('Failed to update like. Please try again.');
+    }
+  };
+
+  // Rest of your component code...
+
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        const [likesCountResponse, userLikeResponse, commentsResponse] = await Promise.all([
+          fetch(`http://localhost:8080/api/likes/count-by-item/${itemId}`, {
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          }),
+          fetch(`http://localhost:8080/api/likes/by-item/${itemId}/user/${userId}`, {
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          }),
+          fetch(`http://localhost:8080/api/comments/${itemId}`, {
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          })
+        ]);
+
+        if (likesCountResponse.ok) {
+          const count = await likesCountResponse.json();
+          setLikeCount(count);
+        }
+
+        if (userLikeResponse.ok) {
+          const hasLiked = await userLikeResponse.json();
+          setIsLiked(hasLiked);
+        }
+
+        if (commentsResponse.ok) {
+          const commentsData = await commentsResponse.json();
+          setComments(commentsData);
+        }
+      } catch (error) {
+        console.error('Error fetching initial data:', error);
+      }
+    };
+
+    fetchInitialData();
+  }, [itemId, userId]);
+
+  useEffect(() => {
+    comments.forEach(comment => {
+      if (!userDetails[comment.userId]) {
+        fetchUserDetails(comment.userId);
+      }
+    });
+  }, [comments]);
+
+  return (
+    // ... rest of your render code stays the same ...
+  );
+};
+
+export default SocialInteractionBar;

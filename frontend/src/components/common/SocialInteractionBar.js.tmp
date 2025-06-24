@@ -1,0 +1,255 @@
+import React, { useState, useEffect } from 'react';
+import { HeartIcon as HeartOutline } from '@heroicons/react/24/outline';
+import { HeartIcon as HeartSolid } from '@heroicons/react/24/solid';
+import { ChatBubbleOvalLeftIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
+import Modal from 'react-modal';
+
+Modal.setAppElement('#root');
+
+const SocialInteractionBar = ({ itemId, userId }) => {
+  const [isLiked, setIsLiked] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [comments, setComments] = useState([]);
+  const [newComment, setNewComment] = useState('');
+  const [likeCount, setLikeCount] = useState(0);
+  const [editingComment, setEditingComment] = useState(null);
+  const [editContent, setEditContent] = useState('');
+  const [userDetails, setUserDetails] = useState({});
+
+  const modalStyles = {
+    content: {
+      position: 'relative',
+      background: 'none',
+      border: 'none',
+      padding: 0,
+      margin: 0,
+      inset: 'auto'
+    },
+    overlay: {
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '1rem'
+    }
+  };
+
+  const handleCloseModal = () => {
+    setShowComments(false);
+    setEditingComment(null);
+    setEditContent('');
+  };
+
+  const fetchUserDetails = async (userId) => {
+    if (userDetails[userId]) return;
+    
+    try {
+      const response = await fetch(`http://localhost:8080/api/users/${userId}`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) throw new Error('Failed to fetch user details');
+      
+      const userData = await response.json();
+      setUserDetails(prev => ({
+        ...prev,
+        [userId]: {
+          username: userData.username,
+          fullName: userData.fullName,
+          profilePicture: userData.profilePicture
+        }
+      }));
+    } catch (error) {
+      console.error('Error fetching user details:', error);
+    }
+  };
+
+  const handleLike = async () => {
+    try {
+      const response = await fetch(`http://localhost:8080/api/likes/${itemId}`, {
+        method: isLiked ? 'DELETE' : 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      setIsLiked(!isLiked);
+      setLikeCount(prev => isLiked ? prev - 1 : prev + 1);
+    } catch (error) {
+      console.error('Error toggling like:', error);
+      alert('Failed to update like. Please try again.');
+    }
+  };
+
+  const fetchComments = async () => {
+    try {
+      const response = await fetch(`http://localhost:8080/api/comments/${itemId}`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch comments');
+      const data = await response.json();
+      setComments(data);
+    } catch (error) {
+      console.error('Error fetching comments:', error);
+    }
+  };
+
+  const handleAddComment = async (e) => {
+    e.preventDefault();
+    if (!newComment.trim()) {
+      alert('Please enter a comment');
+      return;
+    }
+    
+    try {
+      const response = await fetch(`http://localhost:8080/api/comments/${itemId}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId,
+          content: newComment
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const savedComment = await response.json();
+      setNewComment('');
+      setComments(prevComments => [...prevComments, savedComment]);
+      fetchUserDetails(userId);
+    } catch (error) {
+      console.error('Error posting comment:', error);
+      alert('Failed to post comment. Please try again.');
+    }
+  };
+
+  const handleEditComment = async (e) => {
+    e.preventDefault();
+    if (!editContent.trim()) {
+      alert('Comment cannot be empty');
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:8080/api/comments/${editingComment.id}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: editContent
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to update comment');
+
+      const updatedComment = await response.json();
+      setComments(prevComments =>
+        prevComments.map(comment =>
+          comment.id === editingComment.id ? updatedComment : comment
+        )
+      );
+      setEditingComment(null);
+      setEditContent('');
+    } catch (error) {
+      console.error('Error updating comment:', error);
+      alert('Failed to update comment. Please try again.');
+    }
+  };
+
+  const handleDeleteComment = async (commentId) => {
+    if (window.confirm('Are you sure you want to delete this comment?')) {
+      try {
+        const response = await fetch(`http://localhost:8080/api/comments/${commentId}`, {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+
+        if (!response.ok) throw new Error('Failed to delete comment');
+
+        setComments(prevComments =>
+          prevComments.filter(comment => comment.id !== commentId)
+        );
+      } catch (error) {
+        console.error('Error deleting comment:', error);
+        alert('Failed to delete comment. Please try again.');
+      }
+    }
+  };
+
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        const [likesCountResponse, hasLikedResponse, commentsResponse] = await Promise.all([
+          fetch(`http://localhost:8080/api/likes/count-by-item/${itemId}`, {
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          }),
+          fetch(`http://localhost:8080/api/likes/by-item/${itemId}/user/${userId}`, {
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          }),
+          fetch(`http://localhost:8080/api/comments/${itemId}`, {
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          })
+        ]);
+
+        if (likesCountResponse.ok) {
+          const count = await likesCountResponse.json();
+          setLikeCount(count);
+        }
+
+        if (hasLikedResponse.ok) {
+          const hasLiked = await hasLikedResponse.json();
+          setIsLiked(hasLiked);
+        }
+
+        if (commentsResponse.ok) {
+          const commentsData = await commentsResponse.json();
+          setComments(commentsData);
+        }
+      } catch (error) {
+        console.error('Error fetching initial data:', error);
+      }
+    };
+
+    fetchInitialData();
+  }, [itemId, userId]);
+
+  useEffect(() => {
+    comments.forEach(comment => {
+      if (!userDetails[comment.userId]) {
+        fetchUserDetails(comment.userId);
+      }
+    });
+  }, [comments]);
+
+  // ... Rest of the render code
